@@ -1,127 +1,120 @@
 local UIS = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
--- 1. CONFIG & SAVE SYSTEM
+-- 1. CENTRALIZED CONFIG
 local Config = {
-    AimEnabled = true,
-    TriggerEnabled = false,
-    AimSmoothness = 0.1,
-    Keybinds = {
-        ToggleUI = Enum.KeyCode.RightShift,
-        Aim = Enum.KeyCode.Q,
-        Trigger = Enum.KeyCode.E
-    }
+    Aim = { Enabled = true, Sticky = false, Smoothness = 0.1 },
+    Visuals = { ESP = false, Boxes = false, Tracers = false },
+    Keybinds = { ToggleUI = Enum.KeyCode.RightShift, Aim = Enum.KeyCode.Q }
 }
 
-local function SaveSettings()
-    -- Note: In most executors, you use writefile(). In Studio, we print it.
-    local encoded = HttpService:JSONEncode(Config)
-    print("Settings Saved:", encoded)
-    -- If using an executor: writefile("MySettings.json", encoded)
-end
-
--- 2. UI INITIALIZATION
+-- 2. UI CORE
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
 local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Size = UDim2.new(0, 400, 0, 300)
-mainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
-mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-mainFrame.Visible = true
+mainFrame.Size = UDim2.new(0, 450, 0, 320)
+mainFrame.Position = UDim2.new(0.5, -225, 0.5, -160)
+mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 
--- CUSTOM CURSOR (A small dot that follows your mouse when menu is open)
-local customCursor = Instance.new("Frame", screenGui)
-customCursor.Size = UDim2.new(0, 10, 0, 10)
-customCursor.BackgroundColor3 = Color3.new(1, 0, 0)
-customCursor.BorderSizePixel = 0
-customCursor.ZIndex = 10
+-- Tab Navigation
+local navBar = Instance.new("Frame", mainFrame)
+navBar.Size = UDim2.new(0, 100, 1, 0)
+navBar.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 
--- 3. INTERACTIVE KEYBIND HELPER
-local function CreateKeybind(parent, action)
+local container = Instance.new("Frame", mainFrame)
+container.Position = UDim2.new(0, 100, 0, 0)
+container.Size = UDim2.new(1, -100, 1, 0)
+container.BackgroundTransparency = 1
+
+local pages = {
+    Combat = Instance.new("ScrollingFrame", container),
+    Visuals = Instance.new("ScrollingFrame", container),
+}
+
+for name, page in pairs(pages) do
+    page.Size = UDim2.new(1, -10, 1, -10)
+    page.Position = UDim2.new(0, 5, 0, 5)
+    page.BackgroundTransparency = 1
+    page.Visible = false
+    local layout = Instance.new("UIListLayout", page)
+    layout.Padding =指导 = UDim.new(0, 5)
+end
+pages.Combat.Visible = true
+
+-- 3. INTERACTIVE HELPERS (Toggles & Sliders)
+local function CreateToggle(parent, text, configPath, key)
     local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(0.9, 0, 0, 35)
-    btn.Text = action .. ": " .. Config.Keybinds[action].Name
-    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.Size = UDim2.new(0.95, 0, 0, 30)
+    btn.BackgroundColor3 = configPath[key] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(50, 50, 50)
+    btn.Text = text .. ": " .. (configPath[key] and "ON" or "OFF")
     btn.TextColor3 = Color3.new(1, 1, 1)
 
     btn.MouseButton1Click:Connect(function()
-        btn.Text = "Press any key..."
-        local connection
-        connection = UIS.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                Config.Keybinds[action] = input.KeyCode
-                btn.Text = action .. ": " .. input.KeyCode.Name
-                connection:Disconnect()
-                SaveSettings()
-            end
-        end)
+        configPath[key] = not configPath[key]
+        btn.Text = text .. ": " .. (configPath[key] and "ON" or "OFF")
+        btn.BackgroundColor3 = configPath[key] and Color3.fromRGB(0, 150, 0) or Color3.fromRGB(50, 50, 50)
     end)
 end
 
--- 4. INTERACTIVE SLIDER HELPER
-local function CreateSlider(parent, text, min, max, start, callback)
-    local frame = Instance.new("Frame", parent)
-    frame.Size = UDim2.new(0.9, 0, 0, 50)
-    frame.BackgroundTransparency = 1
+-- 4. POPULATE TABS
+-- Combat Tab
+CreateToggle(pages.Combat, "Aim Assist", Config.Aim, "Enabled")
+CreateToggle(pages.Combat, "Sticky Aim", Config.Aim, "Sticky")
 
-    local label = Instance.new("TextLabel", frame)
-    label.Size = UDim2.new(1, 0, 0, 20)
-    label.Text = text .. ": " .. start
-    label.TextColor3 = Color3.new(1, 1, 1)
+-- Visuals Tab
+CreateToggle(pages.Visuals, "Master ESP", Config.Visuals, "ESP")
+CreateToggle(pages.Visuals, "Boxes", Config.Visuals, "Boxes")
 
-    local sliderBar = Instance.new("TextButton", frame)
-    sliderBar.Size = UDim2.new(1, 0, 0, 10)
-    sliderBar.Position = UDim2.new(0, 0, 0.6, 0)
-    sliderBar.Text = ""
-    sliderBar.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-
-    sliderBar.MouseButton1Down:Connect(function()
-        local moveConn
-        moveConn = RunService.RenderStepped:Connect(function()
-            local percent = math.clamp((mouse.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
-            local val = math.floor((min + (max - min) * percent) * 100) / 100
-            label.Text = text .. ": " .. val
-            callback(val)
-            if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                moveConn:Disconnect()
-                SaveSettings()
-            end
-        end)
+-- Tab Switching Buttons
+local function CreateTabBtn(name, pos)
+    local b = Instance.new("TextButton", navBar)
+    b.Size = UDim2.new(1, 0, 0, 40)
+    b.Position = UDim2.new(0, 0, 0, pos)
+    b.Text = name
+    b.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    b.TextColor3 = Color3.new(1, 1, 1)
+    b.MouseButton1Click:Connect(function()
+        for _, p in pairs(pages) do p.Visible = false end
+        pages[name].Visible = true
     end)
 end
+CreateTabBtn("Combat", 0)
+CreateTabBtn("Visuals", 45)
 
--- 5. TAB SYSTEM SETUP
-local nav = Instance.new("Frame", mainFrame)
-nav.Size = UDim2.new(1, 0, 0, 40)
-nav.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-
-local content = Instance.new("ScrollingFrame", mainFrame)
-content.Size = UDim2.new(1, 0, 1, -40)
-content.Position = UDim2.new(0, 0, 0, 40)
-content.CanvasSize = UDim2.new(0, 0, 2, 0)
-
--- Fill Content
-CreateSlider(content, "Aim Smoothness", 0.01, 1, Config.AimSmoothness, function(v) Config.AimSmoothness = v end)
-CreateKeybind(content, "Aim")
-CreateKeybind(content, "Trigger")
-CreateKeybind(content, "ToggleUI")
-
--- 6. MENU TOGGLE & CURSOR LOGIC
-UIS.InputBegan:Connect(function(input, proc)
-    if proc then return end
-    if input.KeyCode == Config.Keybinds.ToggleUI then
-        mainFrame.Visible = not mainFrame.Visible
-        customCursor.Visible = mainFrame.Visible
-        UIS.MouseIconEnabled = not mainFrame.Visible -- Hide real mouse when UI is up
-    end
-end)
-
+-- 5. COMBAT & ESP LOGIC
 RunService.RenderStepped:Connect(function()
-    if mainFrame.Visible then
-        customCursor.Position = UDim2.new(0, mouse.X - 5, 0, mouse.Y - 5)
+    if not Config.Aim.Enabled then return end
+    
+    local target = mouse.Target
+    if target and target.Parent:FindFirstChild("Humanoid") then
+        local cam = workspace.CurrentCamera
+        local targetPos = target.Position
+        
+        -- Sticky Aim logic: Reduces smoothness when hovering over target
+        local smoothness = Config.Aim.Sticky and 0.02 or Config.Aim.Smoothness
+        cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, targetPos), smoothness)
     end
 end)
+
+-- Basic ESP Box logic (Placeholder - requires Highlight or BillboardGuis)
+local function UpdateESP()
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= player and p.Character then
+            local char = p.Character
+            local highlight = char:FindFirstChild("ESPHighlight")
+            if Config.Visuals.ESP then
+                if not highlight then
+                    highlight = Instance.new("Highlight", char)
+                    highlight.Name = "ESPHighlight"
+                end
+                highlight.Enabled = true
+                highlight.FillTransparency = 0.5
+            elseif highlight then
+                highlight.Enabled = false
+            end
+        end
+    end
+end
+RunService.Heartbeat:Connect(UpdateESP)
