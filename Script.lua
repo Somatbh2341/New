@@ -1,123 +1,127 @@
 local UIS = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local player = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
 
--- 1. CONFIGURATION & STATE
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+-- 1. CONFIG & SAVE SYSTEM
 local Config = {
     AimEnabled = true,
     TriggerEnabled = false,
-    AimSmoothness = 0.1, -- Adjustable via slider
+    AimSmoothness = 0.1,
     Keybinds = {
         ToggleUI = Enum.KeyCode.RightShift,
         Aim = Enum.KeyCode.Q,
         Trigger = Enum.KeyCode.E
     }
 }
-local UIVisible = true
 
--- 2. CREATE UI HIERARCHY
+local function SaveSettings()
+    -- Note: In most executors, you use writefile(). In Studio, we print it.
+    local encoded = HttpService:JSONEncode(Config)
+    print("Settings Saved:", encoded)
+    -- If using an executor: writefile("MySettings.json", encoded)
+end
+
+-- 2. UI INITIALIZATION
 local screenGui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
-screenGui.Name = "ModMenu"
-
 local mainFrame = Instance.new("Frame", screenGui)
-mainFrame.Size = UDim2.new(0, 350, 0, 250)
-mainFrame.Position = UDim2.new(0.5, -175, 0.4, -125)
-mainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-mainFrame.BorderSizePixel = 0
+mainFrame.Size = UDim2.new(0, 400, 0, 300)
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -150)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.Visible = true
 
--- Tab Bar
-local tabBar = Instance.new("Frame", mainFrame)
-tabBar.Size = UDim2.new(1, 0, 0, 30)
-tabBar.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+-- CUSTOM CURSOR (A small dot that follows your mouse when menu is open)
+local customCursor = Instance.new("Frame", screenGui)
+customCursor.Size = UDim2.new(0, 10, 0, 10)
+customCursor.BackgroundColor3 = Color3.new(1, 0, 0)
+customCursor.BorderSizePixel = 0
+customCursor.ZIndex = 10
 
--- Pages Container
-local pages = Instance.new("Frame", mainFrame)
-pages.Size = UDim2.new(1, 0, 1, -30)
-pages.Position = UDim2.new(0, 0, 0, 30)
-pages.BackgroundTransparency = 1
+-- 3. INTERACTIVE KEYBIND HELPER
+local function CreateKeybind(parent, action)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
+    btn.Text = action .. ": " .. Config.Keybinds[action].Name
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.TextColor3 = Color3.new(1, 1, 1)
 
-local combatPage = Instance.new("ScrollingFrame", pages)
-combatPage.Size = UDim2.new(1, -10, 1, -10)
-combatPage.Position = UDim2.new(0, 5, 0, 5)
-combatPage.Visible = true
-
-local keybindPage = Instance.new("ScrollingFrame", pages)
-keybindPage.Size = UDim2.new(1, -10, 1, -10)
-keybindPage.Position = UDim2.new(0, 5, 0, 5)
-keybindPage.Visible = false
-
--- 3. HELPER: CREATE SLIDER
-local function CreateSlider(parent, text, min, max, default, callback)
-    local label = Instance.new("TextLabel", parent)
-    label.Size = UDim2.new(1, 0, 0, 20)
-    label.Text = text .. ": " .. default
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.BackgroundTransparency = 1
-
-    local sliderBg = Instance.new("Frame", parent)
-    sliderBg.Size = UDim2.new(0.9, 0, 0, 10)
-    sliderBg.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
-
-    local sliderFill = Instance.new("Frame", sliderBg)
-    sliderFill.Size = UDim2.new((default-min)/(max-min), 0, 1, 0)
-    sliderFill.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
-
-    -- Basic slider click logic (Simple version)
-    sliderBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local percent = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-            local val = min + (max - min) * percent
-            sliderFill.Size = UDim2.new(percent, 0, 1, 0)
-            label.Text = text .. ": " .. string.format("%.2f", val)
-            callback(val)
-        end
+    btn.MouseButton1Click:Connect(function()
+        btn.Text = "Press any key..."
+        local connection
+        connection = UIS.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.Keyboard then
+                Config.Keybinds[action] = input.KeyCode
+                btn.Text = action .. ": " .. input.KeyCode.Name
+                connection:Disconnect()
+                SaveSettings()
+            end
+        end)
     end)
 end
 
--- 4. INITIALIZE CONTENT
-CreateSlider(combatPage, "Aim Smoothness", 0.01, 1, 0.1, function(v) Config.AimSmoothness = v end)
+-- 4. INTERACTIVE SLIDER HELPER
+local function CreateSlider(parent, text, min, max, start, callback)
+    local frame = Instance.new("Frame", parent)
+    frame.Size = UDim2.new(0.9, 0, 0, 50)
+    frame.BackgroundTransparency = 1
 
-local kbList = Instance.new("UIListLayout", keybindPage)
-for action, key in pairs(Config.Keybinds) do
-    local l = Instance.new("TextLabel", keybindPage)
-    l.Size = UDim2.new(1, 0, 0, 30)
-    l.Text = action .. ": " .. tostring(key.Name)
-    l.TextColor3 = Color3.new(1, 1, 1)
-    l.BackgroundTransparency = 0.9
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.Text = text .. ": " .. start
+    label.TextColor3 = Color3.new(1, 1, 1)
+
+    local sliderBar = Instance.new("TextButton", frame)
+    sliderBar.Size = UDim2.new(1, 0, 0, 10)
+    sliderBar.Position = UDim2.new(0, 0, 0.6, 0)
+    sliderBar.Text = ""
+    sliderBar.BackgroundColor3 = Color3.new(0.2, 0.2, 0.2)
+
+    sliderBar.MouseButton1Down:Connect(function()
+        local moveConn
+        moveConn = RunService.RenderStepped:Connect(function()
+            local percent = math.clamp((mouse.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+            local val = math.floor((min + (max - min) * percent) * 100) / 100
+            label.Text = text .. ": " .. val
+            callback(val)
+            if not UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+                moveConn:Disconnect()
+                SaveSettings()
+            end
+        end)
+    end)
 end
 
--- 5. TAB SWITCHING LOGIC
-local function showTab(name)
-    combatPage.Visible = (name == "Combat")
-    keybindPage.Visible = (name == "Keybinds")
-end
+-- 5. TAB SYSTEM SETUP
+local nav = Instance.new("Frame", mainFrame)
+nav.Size = UDim2.new(1, 0, 0, 40)
+nav.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 
-local btn1 = Instance.new("TextButton", tabBar)
-btn1.Size = UDim2.new(0.5, 0, 1, 0)
-btn1.Text = "Combat"
-btn1.MouseButton1Click:Connect(function() showTab("Combat") end)
+local content = Instance.new("ScrollingFrame", mainFrame)
+content.Size = UDim2.new(1, 0, 1, -40)
+content.Position = UDim2.new(0, 0, 0, 40)
+content.CanvasSize = UDim2.new(0, 0, 2, 0)
 
-local btn2 = Instance.new("TextButton", tabBar)
-btn2.Position = UDim2.new(0.5, 0, 0, 0)
-btn2.Size = UDim2.new(0.5, 0, 1, 0)
-btn2.Text = "Keybinds"
-btn2.MouseButton1Click:Connect(function() showTab("Keybinds") end)
+-- Fill Content
+CreateSlider(content, "Aim Smoothness", 0.01, 1, Config.AimSmoothness, function(v) Config.AimSmoothness = v end)
+CreateKeybind(content, "Aim")
+CreateKeybind(content, "Trigger")
+CreateKeybind(content, "ToggleUI")
 
--- 6. CORE LOGIC (Keybinds & Combat)
+-- 6. MENU TOGGLE & CURSOR LOGIC
 UIS.InputBegan:Connect(function(input, proc)
     if proc then return end
     if input.KeyCode == Config.Keybinds.ToggleUI then
-        UIVisible = not UIVisible
-        mainFrame.Visible = UIVisible
+        mainFrame.Visible = not mainFrame.Visible
+        customCursor.Visible = mainFrame.Visible
+        UIS.MouseIconEnabled = not mainFrame.Visible -- Hide real mouse when UI is up
     end
 end)
 
 RunService.RenderStepped:Connect(function()
-    local mouse = player:GetMouse()
-    local target = mouse.Target
-    if Config.AimEnabled and target and target.Parent:FindFirstChild("Humanoid") then
-        local cam = workspace.CurrentCamera
-        cam.CFrame = cam.CFrame:Lerp(CFrame.new(cam.CFrame.Position, target.Position), Config.AimSmoothness)
+    if mainFrame.Visible then
+        customCursor.Position = UDim2.new(0, mouse.X - 5, 0, mouse.Y - 5)
     end
 end)
