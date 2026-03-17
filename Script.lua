@@ -1,4 +1,29 @@
 local UIS = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- 1. CREATE THE UI PROPERLY
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "MyMenu"
+screenGui.Parent = playerGui
+
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 200, 0, 100)
+panel.Position = UDim2.new(0.5, -100, 0.5, -50)
+panel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+panel.Visible = true
+panel.Parent = screenGui
+
+local keyLabel = Instance.new("TextLabel", panel)
+keyLabel.Size = UDim2.new(1, 0, 0, 20)
+keyLabel.Position = UDim2.new(0, 0, 1, -20)
+keyLabel.BackgroundTransparency = 1
+keyLabel.Text = "UI: RShift | Aim: Q | Trigger: E"
+keyLabel.TextColor3 = Color3.new(1, 1, 1)
+keyLabel.TextScaled = true
 
 -- KEYBINDS
 local Keybinds = {
@@ -30,35 +55,3 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
         print("Trigger:", TriggerEnabled)
     end
 end)
-if AimEnabled and currentTarget then
-    ApplyAssist(currentTarget.part.Position)
-end
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
-local mouse = player:GetMouse()
-
-function IsEnemy(target)
-    return target and target.Parent ~= player.Character
-end
-
-RunService.RenderStepped:Connect(function()
-    if not TriggerEnabled then return end
-
-    local target = mouse.Target
-
-    if target and IsEnemy(target) then
-        -- fire your weapon
-        FireEvent:FireServer(
-            workspace.CurrentCamera.CFrame.Position,
-            workspace.CurrentCamera.CFrame.LookVector
-        )
-    end
-end)
-local keyLabel = Instance.new("TextLabel", panel)
-keyLabel.Size = UDim2.new(1,0,0,20)
-keyLabel.Position = UDim2.new(0,0,1,-20)
-keyLabel.BackgroundTransparency = 1
-keyLabel.Text = "UI: RShift | Aim: Q | Trigger: E"
-keyLabel.TextScaled = true
-keyLabel.TextColor3 = Config.Theme.Text
-print(input.KeyCode)
